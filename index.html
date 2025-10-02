@@ -1,1 +1,411 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Web Messenger</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
 
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            height: 100vh;
+            height: 100dvh;
+            padding: 10px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .messenger {
+            width: 100%;
+            max-width: 400px;
+            height: 100%;
+            background: white;
+            border-radius: 20px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+
+        .header {
+            background: #4a5568;
+            color: white;
+            padding: 20px;
+            text-align: center;
+            position: relative;
+        }
+
+        .user-status {
+            font-size: 14px;
+            opacity: 0.8;
+            margin-top: 5px;
+        }
+
+        .connection-status {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            font-size: 12px;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #48bb78;
+        }
+
+        .status-dot.offline {
+            background: #f56565;
+        }
+
+        .messages {
+            flex: 1;
+            padding: 15px;
+            overflow-y: auto;
+            background: #f7fafc;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        .message {
+            padding: 12px 16px;
+            border-radius: 18px;
+            max-width: 85%;
+            word-wrap: break-word;
+            font-size: 16px;
+            animation: messageAppear 0.3s ease-out;
+        }
+
+        @keyframes messageAppear {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .message.own {
+            background: #4299e1;
+            color: white;
+            align-self: flex-end;
+        }
+
+        .message.other {
+            background: white;
+            border: 1px solid #e2e8f0;
+            align-self: flex-start;
+        }
+
+        .message-time {
+            font-size: 11px;
+            opacity: 0.7;
+            margin-top: 5px;
+        }
+
+        .input-area {
+            padding: 15px;
+            background: white;
+            border-top: 1px solid #e2e8f0;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .message-input {
+            flex: 1;
+            padding: 12px 16px;
+            border: 1px solid #cbd5e0;
+            border-radius: 25px;
+            font-size: 16px;
+            outline: none;
+        }
+
+        .send-button {
+            background: #4299e1;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 45px;
+            height: 45px;
+            font-size: 18px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .send-button:hover {
+            background: #3182ce;
+        }
+
+        .send-button:disabled {
+            background: #a0aec0;
+            cursor: not-allowed;
+        }
+
+        .login-form {
+            padding: 40px 20px;
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .login-input {
+            padding: 15px;
+            border: 1px solid #cbd5e0;
+            border-radius: 10px;
+            font-size: 16px;
+            text-align: center;
+        }
+
+        .login-button {
+            padding: 15px;
+            background: #4299e1;
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <div class="messenger">
+        <div class="header">
+            <h2>💬 Web Messenger</h2>
+            <div class="user-status" id="userStatus">Войдите в чат</div>
+            <div class="connection-status">
+                <span class="status-dot" id="statusDot"></span>
+                <span id="connectionStatus">Подключение...</span>
+            </div>
+        </div>
+        
+        <div id="loginSection" class="login-form">
+            <h3>Добро пожаловать! 👋</h3>
+            <input type="text" id="usernameInput" class="login-input" placeholder="Введите ваше имя" maxlength="20">
+            <button id="loginButton" class="login-button">Войти в чат</button>
+        </div>
+
+        <div id="chatSection" style="display: none; flex-direction: column; height: 100%;">
+            <div class="messages" id="messagesContainer"></div>
+            <div class="input-area">
+                <input type="text" id="messageInput" class="message-input" placeholder="Введите сообщение..." maxlength="500" disabled>
+                <button id="sendButton" class="send-button" disabled>➤</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        class WebMessenger {
+            constructor() {
+                // ЗАМЕНИТЕ НА ВАШ URL СЕРВЕРА
+                this.serverUrl = 'https://ваш-сервер.herokuapp.com'; 
+                this.currentUser = null;
+                this.isConnected = false;
+                this.checkInterval = null;
+                
+                this.initializeElements();
+                this.setupEventListeners();
+                this.startConnectionCheck();
+            }
+
+            initializeElements() {
+                this.loginSection = document.getElementById('loginSection');
+                this.chatSection = document.getElementById('chatSection');
+                this.usernameInput = document.getElementById('usernameInput');
+                this.loginButton = document.getElementById('loginButton');
+                this.messageInput = document.getElementById('messageInput');
+                this.sendButton = document.getElementById('sendButton');
+                this.messagesContainer = document.getElementById('messagesContainer');
+                this.userStatus = document.getElementById('userStatus');
+                this.connectionStatus = document.getElementById('connectionStatus');
+                this.statusDot = document.getElementById('statusDot');
+            }
+
+            setupEventListeners() {
+                this.loginButton.addEventListener('click', () => this.login());
+                this.usernameInput.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') this.login();
+                });
+
+                this.sendButton.addEventListener('click', () => this.sendMessage());
+                this.messageInput.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') this.sendMessage();
+                });
+            }
+
+            async startConnectionCheck() {
+                // Проверяем подключение каждые 5 секунд
+                this.checkInterval = setInterval(() => {
+                    this.checkServerConnection();
+                }, 5000);
+                
+                await this.checkServerConnection();
+            }
+
+            async checkServerConnection() {
+                try {
+                    const response = await fetch(`${this.serverUrl}/health`);
+                    if (response.ok) {
+                        this.updateConnectionStatus(true, 'Подключено');
+                    } else {
+                        this.updateConnectionStatus(false, 'Ошибка сервера');
+                    }
+                } catch (error) {
+                    this.updateConnectionStatus(false, 'Нет подключения');
+                }
+            }
+
+            updateConnectionStatus(connected, message) {
+                this.isConnected = connected;
+                this.connectionStatus.textContent = message;
+                this.statusDot.className = `status-dot ${connected ? '' : 'offline'}`;
+                
+                if (this.currentUser) {
+                    this.messageInput.disabled = !connected;
+                    this.sendButton.disabled = !connected;
+                }
+            }
+
+            async login() {
+                const username = this.usernameInput.value.trim();
+                if (!username) {
+                    alert('Пожалуйста, введите имя');
+                    return;
+                }
+
+                if (!this.isConnected) {
+                    alert('Нет подключения к серверу');
+                    return;
+                }
+
+                try {
+                    const response = await fetch(`${this.serverUrl}/login`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({ username })
+                    });
+
+                    if (response.ok) {
+                        this.currentUser = username;
+                        this.userStatus.textContent = `Вы: ${username}`;
+                        this.showChat();
+                        this.startPolling();
+                        this.loadMessages();
+                    } else {
+                        alert('Ошибка входа');
+                    }
+                } catch (error) {
+                    alert('Ошибка подключения к серверу');
+                }
+            }
+
+            showChat() {
+                this.loginSection.style.display = 'none';
+                this.chatSection.style.display = 'flex';
+                this.messageInput.disabled = false;
+                this.sendButton.disabled = false;
+                this.messageInput.focus();
+            }
+
+            async startPolling() {
+                // Опрашиваем сервер каждые 2 секунды для новых сообщений
+                setInterval(async () => {
+                    if (this.currentUser && this.isConnected) {
+                        await this.loadMessages();
+                    }
+                }, 2000);
+            }
+
+            async loadMessages() {
+                try {
+                    const response = await fetch(`${this.serverUrl}/messages`);
+                    if (response.ok) {
+                        const messages = await response.json();
+                        this.renderMessages(messages);
+                    }
+                } catch (error) {
+                    console.error('Error loading messages:', error);
+                }
+            }
+
+            async sendMessage() {
+                const text = this.messageInput.value.trim();
+                if (!text || !this.currentUser || !this.isConnected) return;
+
+                try {
+                    const response = await fetch(`${this.serverUrl}/message`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            username: this.currentUser,
+                            text: text
+                        })
+                    });
+
+                    if (response.ok) {
+                        this.messageInput.value = '';
+                        await this.loadMessages(); // Обновляем сообщения
+                    } else {
+                        alert('Ошибка отправки сообщения');
+                    }
+                } catch (error) {
+                    alert('Ошибка подключения');
+                }
+            }
+
+            renderMessages(messages) {
+                this.messagesContainer.innerHTML = '';
+                messages.forEach(message => this.renderMessage(message));
+                this.messagesContainer.scrollTop = this.messagesContainer.scrollHeight;
+            }
+
+            renderMessage(message) {
+                const messageDiv = document.createElement('div');
+                const messageType = message.username === this.currentUser ? 'own' : 'other';
+                
+                messageDiv.className = `message ${messageType}`;
+                
+                const timeString = new Date(message.timestamp).toLocaleTimeString('ru-RU', {
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+
+                messageDiv.innerHTML = `
+                    <div class="message-text">${this.escapeHtml(message.text)}</div>
+                    <div class="message-time">
+                        ${message.username} • ${timeString}
+                    </div>
+                `;
+
+                this.messagesContainer.appendChild(messageDiv);
+            }
+
+            escapeHtml(text) {
+                const div = document.createElement('div');
+                div.textContent = text;
+                return div.innerHTML;
+            }
+        }
+
+        // Инициализация мессенджера
+        document.addEventListener('DOMContentLoaded', () => {
+            new WebMessenger();
+        });
+    </script>
+</body>
+  </html>
